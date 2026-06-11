@@ -4,8 +4,11 @@
 * Version :1.0
 * Author : Rohit, CubeYogi 
 **/
-const express = require("express");
 require("dotenv").config();
+const authenticate = require("./middleware/auth");
+const express = require("express");
+
+
 
 const { getLeads, getLeadById } = require("./Lead/get_lead");
 const { updateLead } = require("./Lead/update");
@@ -28,7 +31,7 @@ const {getNotes,createNote,updateNote,deleteNote} = require("./Lead/notes");
 const app = express();
 
 app.use(express.json()); //  IMPORTANT
-
+app.use(authenticate);
 // Lead APIs
 app.get("/getLeads", getLeads);
 app.get("/getLeadById/:id", getLeadById);
@@ -60,6 +63,6 @@ app.post("/lead/:id/notes", createNote);
 app.put("/lead/:leadId/notes/:noteId", updateNote);
 app.delete("/lead/:leadId/notes/:noteId", deleteNote);
 
-app.listen(process.env.PORT, () => {
-  console.log(`🚀 Server running on port ${process.env.PORT}`);
+app.listen(process.env.PORT || 3000, () => {
+  console.log(`🚀 Server running on port ${process.env.PORT || 3000}`);
 });
