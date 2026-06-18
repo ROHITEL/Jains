@@ -3,97 +3,165 @@ const { getAccessToken } = require("../services/zohoAuth");
 const logActivity = require("../utils/activityLogger");
 
 // ==========================================
-// Search Leads By Jains User Email
+// Search Leads By Multiple Jains Users
 // ==========================================
 const searchLeadsByJainsUser = async (req, res) => {
   try {
     const bodyData = req.body || {};
 
     // ==========================================
-    // Validate Email
+    // Validate Emails
     // ==========================================
-    if (!bodyData.Jains_User?.email) {
+    const emails = bodyData?.Jains_User?.emails;
+
+    if (
+      !Array.isArray(emails) ||
+      emails.length === 0 ||
+      emails.length > 500
+    ) {
       return res.status(400).json({
         status: "error",
-        message: "Jains_User.email field is mandatory"
+        message:
+          "Jains_User.emails must be an array containing 1 to 500 email addresses"
       });
     }
 
     const token = await getAccessToken();
-    const email = bodyData.Jains_User.email.trim();
 
-    let zohoUser;
+    const foundUsers = [];
+    const invalidEmails = [];
 
     // ==========================================
-    // Verify Jains User
+    // Fetch Users in Batches
     // ==========================================
-    try {
-      const userResponse = await axios.get(
-        `${process.env.ZOHO_DOMAIN}/crm/v8/Jains_User/search`,
-        {
-          headers: {
-            Authorization: `Zoho-oauthtoken ${token}`
-          },
-          params: {
-            criteria: `(Email:equals:${email})`
+    const batchSize = 25;
+
+    for (let i = 0; i < emails.length; i += batchSize) {
+      const batch = emails.slice(i, i + batchSize);
+
+      const userPromises = batch.map(async (email) => {
+        try {
+          const response = await axios.get(
+            `${process.env.ZOHO_DOMAIN}/crm/v8/Jains_User/search`,
+            {
+              headers: {
+                Authorization: `Zoho-oauthtoken ${token}`
+              },
+              params: {
+                criteria: `(Email:equals:${email.trim()})`
+              }
+            }
+          );
+
+          if (response.data.data?.length) {
+            return response.data.data[0];
           }
+
+          invalidEmails.push(email);
+          return null;
+        } catch (err) {
+          invalidEmails.push(email);
+          return null;
         }
-      );
-
-      if (
-        !userResponse.data.data ||
-        userResponse.data.data.length === 0
-      ) {
-        throw new Error("User not found");
-      }
-
-      zohoUser = userResponse.data.data[0];
-    } catch (error) {
-      await logActivity({
-        user_id: email,
-        action: "GET_LEADS",
-        module: "Leads",
-        status: "FAILED",
-        message: `Invalid User Email: ${email}`,
-        ip_address: req.ip
       });
 
-      return res.status(401).json({
+      const users = await Promise.all(userPromises);
+
+      foundUsers.push(...users.filter(Boolean));
+    }
+
+    // ==========================================
+    // No Valid Users Found
+    // ==========================================
+    if (foundUsers.length === 0) {
+      return res.status(404).json({
         status: "error",
-        message: "Invalid User Email"
+        message: "No valid users found",
+        invalidEmails
       });
     }
 
     // ==========================================
-    // Search Leads Using Jains User ID
+    // Create User Map
     // ==========================================
-    const criteria = `(Jains_User:equals:${zohoUser.id})`;
+    const userMap = {};
 
-    const leadResponse = await axios.get(
-      `${process.env.ZOHO_DOMAIN}/crm/v8/Leads/search`,
-      {
-        headers: {
-          Authorization: `Zoho-oauthtoken ${token}`
-        },
-        params: {
-          criteria,
-          fields:
-            "id,Last_Name,Company,Email,Phone,Jains_User"
+    foundUsers.forEach((user) => {
+      userMap[user.id] = {
+        id: user.id,
+        email: user.Email,
+        name: user.Name
+      };
+    });
+
+    // ==========================================
+    // Search Leads For Users
+    // ==========================================
+    const allLeads = [];
+    const leadBatchSize = 50;
+
+    for (let i = 0; i < foundUsers.length; i += leadBatchSize) {
+      const userChunk = foundUsers.slice(i, i + leadBatchSize);
+
+      const criteria = userChunk
+        .map((user) => `(Jains_User:equals:${user.id})`)
+        .join("or");
+
+      try {
+        const leadResponse = await axios.get(
+          `${process.env.ZOHO_DOMAIN}/crm/v8/Leads/search`,
+          {
+            headers: {
+              Authorization: `Zoho-oauthtoken ${token}`
+            },
+            params: {
+              criteria
+            }
+          }
+        );
+
+        if (leadResponse.data.data?.length) {
+          allLeads.push(...leadResponse.data.data);
         }
+      } catch (err) {
+        console.error(
+          "Lead Search Error:",
+          err.response?.data || err.message
+        );
       }
-    );
-
-    const leads = leadResponse.data.data || [];
+    }
 
     // ==========================================
-    // Success Log
+    // Group Leads By User Email
+    // ==========================================
+    const leadsByUser = {};
+
+    foundUsers.forEach((user) => {
+      leadsByUser[user.Email] = [];
+    });
+
+    allLeads.forEach((lead) => {
+      const userId = lead.Jains_User?.id;
+
+      if (!userId || !userMap[userId]) {
+        return;
+      }
+
+      const email = userMap[userId].email;
+
+      // Push complete lead record
+      leadsByUser[email].push(lead);
+    });
+
+    // ==========================================
+    // Log Success
     // ==========================================
     await logActivity({
-      user_id: zohoUser.id,
+      user_id: "MULTI_USER_SEARCH",
       action: "GET_LEADS",
       module: "Leads",
       status: "SUCCESS",
-      message: `Fetched ${leads.length} leads`,
+      message: `Fetched ${allLeads.length} leads for ${foundUsers.length} users`,
       ip_address: req.ip
     });
 
@@ -102,19 +170,16 @@ const searchLeadsByJainsUser = async (req, res) => {
     // ==========================================
     return res.status(200).json({
       status: "success",
-      user: {
-        id: zohoUser.id,
-        email: zohoUser.Email,
-        name: zohoUser.Name
-      },
-      totalLeads: leads.length,
-      leads
+      totalRequestedEmails: emails.length,
+      totalValidUsers: foundUsers.length,
+      totalInvalidEmails: invalidEmails.length,
+      totalLeads: allLeads.length,
+      invalidEmails,
+      data: leadsByUser
     });
-
   } catch (err) {
-
     await logActivity({
-      user_id: req.body?.Jains_User?.email || "UNKNOWN",
+      user_id: "UNKNOWN",
       action: "GET_LEADS",
       module: "Leads",
       status: "ERROR",
