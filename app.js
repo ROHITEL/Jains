@@ -24,9 +24,8 @@ const {createuser} = require("./User/create_user");
 const {updateUser} = require("./User/update_user");
 const { deleteUserById } = require("./User/delete_user");
 const {searchLeadsByJainsUser} = require("./Lead/get_lead_by_jains_user");
-const {searchLeadsByHierarchy} = require("./Lead/get_lead_by_hierarchy");
 const {getNotes,createNote,updateNote,deleteNote} = require("./Lead/notes");
-
+const { getusers, getUserByEmail } = require("./User/get_users");
 
 const app = express();
 
@@ -56,7 +55,8 @@ app.post("/user/create", createuser);
 app.put("/user/update/:id", updateUser);
 app.delete("/user/delete/:id", deleteUserById);
 app.get("/getLeadByJainsUser", searchLeadsByJainsUser);
-app.get("/searchByHierarchy", searchLeadsByHierarchy);
+app.get("/getusers", getusers);
+app.get("/getUserByEmail", getUserByEmail);
 // Notes APIs
 app.get("/lead/:id/notes", getNotes);
 app.post("/lead/:id/notes", createNote);
