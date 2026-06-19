@@ -23,6 +23,7 @@ const { getAttachments,getAttachmentById,uploadAttachment,deleteAttachment} = re
 const {createuser} = require("./User/create_user");
 const {updateUser} = require("./User/update_user");
 const { deleteUserById } = require("./User/delete_user");
+const {searchLeadsByJainsUsers} = require("./Lead/get_lead_by_jains_users");
 const {searchLeadsByJainsUser} = require("./Lead/get_lead_by_jains_user");
 const {getNotes,createNote,updateNote,deleteNote} = require("./Lead/notes");
 const { getusers, getUserByEmail } = require("./User/get_users");
@@ -54,6 +55,7 @@ app.delete("/lead/:leadId/attachments/:attachmentId", deleteAttachment);
 app.post("/user/create", createuser);
 app.put("/user/update/:id", updateUser);
 app.delete("/user/delete/:id", deleteUserById);
+app.get("/getLeadByJainsUsers", searchLeadsByJainsUsers);
 app.get("/getLeadByJainsUser", searchLeadsByJainsUser);
 app.get("/getusers", getusers);
 app.get("/getUserByEmail", getUserByEmail);
