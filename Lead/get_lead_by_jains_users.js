@@ -5,7 +5,7 @@ const logActivity = require("../utils/activityLogger");
 // ==========================================
 // Search Leads By Multiple Jains Users
 // ==========================================
-const searchLeadsByJainsUser = async (req, res) => {
+const searchLeadsByJainsUsers = async (req, res) => {
   try {
     const bodyData = req.body || {};
 
@@ -16,13 +16,13 @@ const searchLeadsByJainsUser = async (req, res) => {
 
     if (
       !Array.isArray(emails) ||
-      emails.length === 0 ||
+        emails.length < 2 ||
       emails.length > 500
     ) {
       return res.status(400).json({
         status: "error",
         message:
-          "Jains_User.emails must be an array containing 1 to 500 email addresses"
+          "Jains_User.emails must be an array containing 2 to 500 email addresses"
       });
     }
 
@@ -206,5 +206,5 @@ const searchLeadsByJainsUser = async (req, res) => {
 };
 
 module.exports = {
-  searchLeadsByJainsUser
+  searchLeadsByJainsUsers
 };
